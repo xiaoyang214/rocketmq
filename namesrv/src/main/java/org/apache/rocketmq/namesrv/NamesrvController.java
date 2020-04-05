@@ -74,16 +74,16 @@ public class NamesrvController {
     }
 
     public boolean initialize() {
-
+        // 加载 kv config 配置
         this.kvConfigManager.load();
-
+        // 初始化 netty，初始化 boss线程组，worker线程组
         this.remotingServer = new NettyRemotingServer(this.nettyServerConfig, this.brokerHousekeepingService);
-
+        // 创建固定8个线程的线程池
         this.remotingExecutor =
             Executors.newFixedThreadPool(nettyServerConfig.getServerWorkerThreads(), new ThreadFactoryImpl("RemotingExecutorThread_"));
 
         this.registerProcessor();
-
+        // 启动定时任务，扫描不活跃的 broker， 默认 120s 没有发起心跳为不活跃的 broker, 延迟 5s 执行，每 10s 执行一次
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override
@@ -91,7 +91,7 @@ public class NamesrvController {
                 NamesrvController.this.routeInfoManager.scanNotActiveBroker();
             }
         }, 5, 10, TimeUnit.SECONDS);
-
+        // 定时打印
         this.scheduledExecutorService.scheduleAtFixedRate(new Runnable() {
 
             @Override

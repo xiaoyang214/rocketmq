@@ -88,8 +88,9 @@ public class BrokerStartup {
     }
 
     public static BrokerController createBrokerController(String[] args) {
+        // 设置版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
-
+        // 参数赋值，netty配置 sndBuf, rcvBuf
         if (null == System.getProperty(NettySystemConfig.COM_ROCKETMQ_REMOTING_SOCKET_SNDBUF_SIZE)) {
             NettySystemConfig.socketSndbufSize = 131072;
         }
@@ -106,21 +107,27 @@ public class BrokerStartup {
             if (null == commandLine) {
                 System.exit(-1);
             }
-
+            // 初始化 broker 参数
             final BrokerConfig brokerConfig = new BrokerConfig();
+            // 初始化 netty server 参数
             final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+            // 初始化 netty client 参数
             final NettyClientConfig nettyClientConfig = new NettyClientConfig();
-
+            // 配置 netty client 是否使用 ssl 模式
             nettyClientConfig.setUseTLS(Boolean.parseBoolean(System.getProperty(TLS_ENABLE,
                 String.valueOf(TlsSystemConfig.tlsMode == TlsMode.ENFORCING))));
+            // 设置 netty server 监听的端口 10911
             nettyServerConfig.setListenPort(10911);
+            // 初始化消息存储配置
             final MessageStoreConfig messageStoreConfig = new MessageStoreConfig();
-
+            // 如果 broker 是 slave 节点
+            // 如果开启了 slaveReadEnable = true, 当 master broker 发现 consumer 消费点与 commitlog 最新值的差值的容量超过该机器内存百分比，会推荐 master 从
+            // slave读取数据，降低 master 的 IO
             if (BrokerRole.SLAVE == messageStoreConfig.getBrokerRole()) {
                 int ratio = messageStoreConfig.getAccessMessageInMemoryMaxRatio() - 10;
                 messageStoreConfig.setAccessMessageInMemoryMaxRatio(ratio);
             }
-
+            // 读取传入的配置文件
             if (commandLine.hasOption('c')) {
                 String file = commandLine.getOptionValue('c');
                 if (file != null) {
@@ -146,7 +153,7 @@ public class BrokerStartup {
                 System.out.printf("Please set the %s variable in your environment to match the location of the RocketMQ installation", MixAll.ROCKETMQ_HOME_ENV);
                 System.exit(-2);
             }
-
+            // 获取 name server 地址，校验地址是否合法
             String namesrvAddr = brokerConfig.getNamesrvAddr();
             if (null != namesrvAddr) {
                 try {
@@ -161,7 +168,7 @@ public class BrokerStartup {
                     System.exit(-3);
                 }
             }
-
+            // 设置 broker id
             switch (messageStoreConfig.getBrokerRole()) {
                 case ASYNC_MASTER:
                 case SYNC_MASTER:
@@ -177,7 +184,7 @@ public class BrokerStartup {
                 default:
                     break;
             }
-
+            // 设置 ha 监听端口
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();
@@ -206,7 +213,7 @@ public class BrokerStartup {
             MixAll.printObjectProperties(log, nettyServerConfig);
             MixAll.printObjectProperties(log, nettyClientConfig);
             MixAll.printObjectProperties(log, messageStoreConfig);
-
+            // 创建 broker controller
             final BrokerController controller = new BrokerController(
                 brokerConfig,
                 nettyServerConfig,
@@ -214,13 +221,13 @@ public class BrokerStartup {
                 messageStoreConfig);
             // remember all configs to prevent discard
             controller.getConfiguration().registerConfig(properties);
-
+            // 初始化 controller
             boolean initResult = controller.initialize();
             if (!initResult) {
                 controller.shutdown();
                 System.exit(-3);
             }
-
+            // 注册 jvm hook
             Runtime.getRuntime().addShutdownHook(new Thread(new Runnable() {
                 private volatile boolean hasShutdown = false;
                 private AtomicInteger shutdownTimes = new AtomicInteger(0);

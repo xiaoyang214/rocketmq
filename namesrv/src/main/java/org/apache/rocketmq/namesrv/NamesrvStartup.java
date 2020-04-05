@@ -54,11 +54,14 @@ public class NamesrvStartup {
     public static NamesrvController main0(String[] args) {
 
         try {
+            // 创建 NamesrvController
             NamesrvController controller = createNamesrvController(args);
             start(controller);
+
             String tip = "The Name Server boot success. serializeType=" + RemotingCommand.getSerializeTypeConfigInThisServer();
             log.info(tip);
             System.out.printf("%s%n", tip);
+
             return controller;
         } catch (Throwable e) {
             e.printStackTrace();
@@ -69,19 +72,23 @@ public class NamesrvStartup {
     }
 
     public static NamesrvController createNamesrvController(String[] args) throws IOException, JoranException {
+        // 设置版本号
         System.setProperty(RemotingCommand.REMOTING_VERSION_KEY, Integer.toString(MQVersion.CURRENT_VERSION));
         //PackageConflictDetect.detectFastjson();
-
+        // 设置命令行参数
         Options options = ServerUtil.buildCommandlineOptions(new Options());
         commandLine = ServerUtil.parseCmdLine("mqnamesrv", args, buildCommandlineOptions(options), new PosixParser());
         if (null == commandLine) {
             System.exit(-1);
             return null;
         }
-
+        // 初始化 name server config
         final NamesrvConfig namesrvConfig = new NamesrvConfig();
+        // 初始化 netty config
         final NettyServerConfig nettyServerConfig = new NettyServerConfig();
+        // 修改端口号为 9876
         nettyServerConfig.setListenPort(9876);
+        // 通过 -c 参数来执行配置文件
         if (commandLine.hasOption('c')) {
             String file = commandLine.getOptionValue('c');
             if (file != null) {

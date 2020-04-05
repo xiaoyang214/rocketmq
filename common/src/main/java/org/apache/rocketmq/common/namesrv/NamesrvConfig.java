@@ -28,12 +28,17 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 
 public class NamesrvConfig {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.NAMESRV_LOGGER_NAME);
-
+    // 加载 rocketmq home, 默认获取 ROCKETMQ_HOME 环境变量
     private String rocketmqHome = System.getProperty(MixAll.ROCKETMQ_HOME_PROPERTY, System.getenv(MixAll.ROCKETMQ_HOME_ENV));
+    // 存放 kv配置属性的位置
     private String kvConfigPath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "kvConfig.json";
+    // 存放 namesever 配置的路径
     private String configStorePath = System.getProperty("user.home") + File.separator + "namesrv" + File.separator + "namesrv.properties";
+    // 默认的生产环境名称
     private String productEnvName = "center";
+    // 是否是集群测试，默认不是
     private boolean clusterTest = false;
+    // 是否支持顺序消息，默认不支持
     private boolean orderMessageEnable = false;
 
     public boolean isOrderMessageEnable() {
