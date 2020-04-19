@@ -42,12 +42,15 @@ public class IndexHeader {
     }
 
     public void load() {
+        // 头信息包含 40 字节
+        // 每一个索引文件包含开始的时间戳，结束的时间戳，开始的物理偏移量，结束的物理偏移量
         this.beginTimestamp.set(byteBuffer.getLong(beginTimestampIndex));
         this.endTimestamp.set(byteBuffer.getLong(endTimestampIndex));
         this.beginPhyOffset.set(byteBuffer.getLong(beginPhyoffsetIndex));
         this.endPhyOffset.set(byteBuffer.getLong(endPhyoffsetIndex));
-
+        // hash槽的数量
         this.hashSlotCount.set(byteBuffer.getInt(hashSlotcountIndex));
+        // 索引的数量
         this.indexCount.set(byteBuffer.getInt(indexCountIndex));
 
         if (this.indexCount.get() <= 0) {

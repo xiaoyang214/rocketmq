@@ -64,31 +64,31 @@ import org.apache.rocketmq.store.stats.BrokerStatsManager;
 
 public class DefaultMessageStore implements MessageStore {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    // 消息存储配置
     private final MessageStoreConfig messageStoreConfig;
-    // CommitLog
+    // CommitLog 实现类
     private final CommitLog commitLog;
-
+    // consumerQueue 的关系，按 topic 分组，每一个 topic 有多个 ConsumerQueue
     private final ConcurrentMap<String/* topic */, ConcurrentMap<Integer/* queueId */, ConsumeQueue>> consumeQueueTable;
-
+    // ConsumerQueue 刷磁盘服务
     private final FlushConsumeQueueService flushConsumeQueueService;
-
+    // 清理 CommitLog 的服务
     private final CleanCommitLogService cleanCommitLogService;
-
+    // 清理 ConsumeQueue 的服务
     private final CleanConsumeQueueService cleanConsumeQueueService;
-
+    // IndexFile 文件服务
     private final IndexService indexService;
-
+    // 分配 MappedFile 服务
     private final AllocateMappedFileService allocateMappedFileService;
-
+    // 根据 CommitLog，分发 ConsumeQueue 和 IndexFile 文件服务
     private final ReputMessageService reputMessageService;
-
+    // HA 服务
     private final HAService haService;
-
+    // 定时消息处理服务
     private final ScheduleMessageService scheduleMessageService;
-
+    // 存储状态服务
     private final StoreStatsService storeStatsService;
-
+    // 消息内存存储服务
     private final TransientStorePool transientStorePool;
 
     private final RunningFlags runningFlags = new RunningFlags();
@@ -97,15 +97,17 @@ public class DefaultMessageStore implements MessageStore {
     private final ScheduledExecutorService scheduledExecutorService =
         Executors.newSingleThreadScheduledExecutor(new ThreadFactoryImpl("StoreScheduledThread"));
     private final BrokerStatsManager brokerStatsManager;
+    // 长轮训消息到达监听
     private final MessageArrivingListener messageArrivingListener;
+    // Broker 的配置
     private final BrokerConfig brokerConfig;
 
     private volatile boolean shutdown = true;
-
+    // 存储检查点
     private StoreCheckpoint storeCheckpoint;
 
     private AtomicLong printTimes = new AtomicLong(0);
-
+    // CommitLog 文件转发请求
     private final LinkedList<CommitLogDispatcher> dispatcherList;
 
     private RandomAccessFile lockFile;
@@ -147,7 +149,7 @@ public class DefaultMessageStore implements MessageStore {
         if (messageStoreConfig.isTransientStorePoolEnable()) {
             this.transientStorePool.init();
         }
-
+        // mmap
         this.allocateMappedFileService.start();
 
         this.indexService.start();
@@ -185,7 +187,7 @@ public class DefaultMessageStore implements MessageStore {
                 result = result && this.scheduleMessageService.load();
             }
 
-            // load Commit Log
+            // load Commit Log, 映射到 MappedFile 中
             result = result && this.commitLog.load();
 
             // load Consume Queue
@@ -384,7 +386,7 @@ public class DefaultMessageStore implements MessageStore {
             log.warn("message store has shutdown, so putMessage is forbidden");
             return PutMessageStatus.SERVICE_NOT_AVAILABLE;
         }
-
+        // 如果是 slave 节点，直接停止写入
         if (BrokerRole.SLAVE == this.messageStoreConfig.getBrokerRole()) {
             long value = this.printTimes.getAndIncrement();
             if ((value % 50000) == 0) {
@@ -471,17 +473,19 @@ public class DefaultMessageStore implements MessageStore {
 
     @Override
     public PutMessageResult putMessage(MessageExtBrokerInner msg) {
+        // 检查当前是否可以写入
         PutMessageStatus checkStoreStatus = this.checkStoreStatus();
         if (checkStoreStatus != PutMessageStatus.PUT_OK) {
             return new PutMessageResult(checkStoreStatus, null);
         }
-
+        // 检查消息状态，topic 长度，properties的长度
         PutMessageStatus msgCheckStatus = this.checkMessage(msg);
         if (msgCheckStatus == PutMessageStatus.MESSAGE_ILLEGAL) {
             return new PutMessageResult(msgCheckStatus, null);
         }
-
+        // 开始时间
         long beginTime = this.getSystemClock().now();
+        // 写入 commitLog
         PutMessageResult result = this.commitLog.putMessage(msg);
         long elapsedTime = this.getSystemClock().now() - beginTime;
         if (elapsedTime > 500) {
@@ -1390,6 +1394,7 @@ public class DefaultMessageStore implements MessageStore {
     }
 
     private void recover(final boolean lastExitOK) {
+        // 获取 consumerqueue 的指针
         long maxPhyOffsetOfConsumeQueue = this.recoverConsumeQueue();
 
         if (lastExitOK) {
@@ -1424,6 +1429,7 @@ public class DefaultMessageStore implements MessageStore {
         long maxPhysicOffset = -1;
         for (ConcurrentMap<Integer, ConsumeQueue> maps : this.consumeQueueTable.values()) {
             for (ConsumeQueue logic : maps.values()) {
+                // 获取 consumeQueue
                 logic.recover();
                 if (logic.getMaxPhysicOffset() > maxPhysicOffset) {
                     maxPhysicOffset = logic.getMaxPhysicOffset();
@@ -1598,19 +1604,25 @@ public class DefaultMessageStore implements MessageStore {
 
         private void deleteExpiredFiles() {
             int deleteCount = 0;
+            // 文件保留时间
             long fileReservedTime = DefaultMessageStore.this.getMessageStoreConfig().getFileReservedTime();
+            // 删除物理文件的间隔
             int deletePhysicFilesInterval = DefaultMessageStore.this.getMessageStoreConfig().getDeleteCommitLogFilesInterval();
+            // MappedFile 在删除过程中占用超过这个时间后会被强制删除
             int destroyMapedFileIntervalForcibly = DefaultMessageStore.this.getMessageStoreConfig().getDestroyMapedFileIntervalForcibly();
-
+            // 是否是凌晨4点，默认
             boolean timeup = this.isTimeToDelete();
+            // 磁盘预留空间是否充足，如果不充足，返回 false
             boolean spacefull = this.isSpaceToDelete();
+            // 手动删除
             boolean manualDelete = this.manualDeleteFileSeveralTimes > 0;
-
+            // 满足一个条件即可
             if (timeup || spacefull || manualDelete) {
 
                 if (manualDelete)
                     this.manualDeleteFileSeveralTimes--;
 
+                // 允许轻质删除，并且可以直接删除
                 boolean cleanAtOnce = DefaultMessageStore.this.getMessageStoreConfig().isCleanFileForciblyEnable() && this.cleanImmediately;
 
                 log.info("begin to delete before {} hours file. timeup: {} spacefull: {} manualDeleteFileSeveralTimes: {} cleanAtOnce: {}",
@@ -1619,7 +1631,7 @@ public class DefaultMessageStore implements MessageStore {
                     spacefull,
                     manualDeleteFileSeveralTimes,
                     cleanAtOnce);
-
+                // 72 * 1h
                 fileReservedTime *= 60 * 60 * 1000;
 
                 deleteCount = DefaultMessageStore.this.commitLog.deleteExpiredFile(fileReservedTime, deletePhysicFilesInterval,
@@ -1658,20 +1670,25 @@ public class DefaultMessageStore implements MessageStore {
         }
 
         private boolean isSpaceToDelete() {
+            // 磁盘使用的最大量
             double ratio = DefaultMessageStore.this.getMessageStoreConfig().getDiskMaxUsedSpaceRatio() / 100.0;
-
+            // 是否立即执行
             cleanImmediately = false;
 
             {
                 String storePathPhysic = DefaultMessageStore.this.getMessageStoreConfig().getStorePathCommitLog();
+                // 获取当前目录下磁盘的使用率
                 double physicRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathPhysic);
+                // 如果磁盘分区使用率超过该阔值，将设置磁盘不可写， 此时会拒绝新消息的写人
                 if (physicRatio > diskSpaceWarningLevelRatio) {
+                    // 将磁盘设置为不可写
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskFull();
                     if (diskok) {
                         DefaultMessageStore.log.error("physic disk maybe full soon " + physicRatio + ", so mark disk full");
                     }
 
                     cleanImmediately = true;
+                // 如果磁盘分区使用超过该阔值，建议立即执行过期文件清除，但不会拒绝 新消息的写入。
                 } else if (physicRatio > diskSpaceCleanForciblyRatio) {
                     cleanImmediately = true;
                 } else {
@@ -1690,6 +1707,7 @@ public class DefaultMessageStore implements MessageStore {
             {
                 String storePathLogics = StorePathConfigHelper
                     .getStorePathConsumeQueue(DefaultMessageStore.this.getMessageStoreConfig().getStorePathRootDir());
+                // storePath 目录下磁盘使用率
                 double logicsRatio = UtilAll.getDiskPartitionSpaceUsedPercent(storePathLogics);
                 if (logicsRatio > diskSpaceWarningLevelRatio) {
                     boolean diskok = DefaultMessageStore.this.runningFlags.getAndMakeDiskFull();

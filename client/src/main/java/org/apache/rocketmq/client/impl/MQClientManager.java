@@ -45,9 +45,12 @@ public class MQClientManager {
     }
 
     public MQClientInstance getOrCreateMQClientInstance(final ClientConfig clientConfig, RPCHook rpcHook) {
+        // 每一个 客户端进程 都只有一个 clientId，instanceName 会被替换为 PID，不同的生产者和消费者，都共用一个 MQClientInstance
         String clientId = clientConfig.buildMQClientId();
+        // 是否有缓存
         MQClientInstance instance = this.factoryTable.get(clientId);
         if (null == instance) {
+            // 创建 MQClientInstance 的同时，会配置和broker通讯的 netty 组件
             instance =
                 new MQClientInstance(clientConfig.cloneClientConfig(),
                     this.factoryIndexGenerator.getAndIncrement(), clientId, rpcHook);

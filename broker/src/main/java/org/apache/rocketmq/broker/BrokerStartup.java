@@ -184,11 +184,11 @@ public class BrokerStartup {
                 default:
                     break;
             }
-
+            // 是否开启了基于 dlegder 技术来管理 commitlog，如果开启了，将 brokerId 设置为 -1
             if (messageStoreConfig.isEnableDLegerCommitLog()) {
                 brokerConfig.setBrokerId(-1);
             }
-
+            // 设置 ha 监听的端口号
             messageStoreConfig.setHaListenPort(nettyServerConfig.getListenPort() + 1);
             LoggerContext lc = (LoggerContext) LoggerFactory.getILoggerFactory();
             JoranConfigurator configurator = new JoranConfigurator();

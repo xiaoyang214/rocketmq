@@ -64,8 +64,9 @@ public class IndexService {
                 try {
                     IndexFile f = new IndexFile(file.getPath(), this.hashSlotNum, this.indexNum, 0, 0);
                     f.load();
-
+                    // 如果是异常退出
                     if (!lastExitOK) {
+                        // 文件的最后更新时间大于 checkpoint index 最后刷盘时间，则将 indexFile 销毁
                         if (f.getEndTimestamp() > this.defaultMessageStore.getStoreCheckpoint()
                             .getIndexMsgTimestamp()) {
                             f.destroy(0);

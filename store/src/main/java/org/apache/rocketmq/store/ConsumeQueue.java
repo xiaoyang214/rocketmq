@@ -25,22 +25,35 @@ import org.apache.rocketmq.logging.InternalLoggerFactory;
 import org.apache.rocketmq.store.config.BrokerRole;
 import org.apache.rocketmq.store.config.StorePathConfigHelper;
 
+/**
+ * 一个 ConsumeQueue 默认包含 30w 个条目
+ *
+ * |                   |        |
+ * | CommitLog offset  |  size  |  Tag hashcode
+ * |    8 bit          |  4bit  |      8 bit
+ * ConsumeQueue 为 CommitLog 的索引
+ */
 public class ConsumeQueue {
     private static final InternalLogger log = InternalLoggerFactory.getLogger(LoggerName.STORE_LOGGER_NAME);
-
+    // 每一个消息的大小
     public static final int CQ_STORE_UNIT_SIZE = 20;
     private static final InternalLogger LOG_ERROR = InternalLoggerFactory.getLogger(LoggerName.STORE_ERROR_LOGGER_NAME);
 
     private final DefaultMessageStore defaultMessageStore;
 
     private final MappedFileQueue mappedFileQueue;
+    // 当前 ConsumeQueue 对应的 topic
     private final String topic;
+    // 对应 topic 的 queueId，一个 ConsumeQueue 从属于一个 topic 下的某一个 queue, 一个 topic 有多个 queue, 有多个 ConsumeQueue 文件
     private final int queueId;
     private final ByteBuffer byteBufferIndex;
-
+    // 存储路径
     private final String storePath;
+    // 文件大小
     private final int mappedFileSize;
+    // 最大物理偏移量
     private long maxPhysicOffset = -1;
+    // 最小逻辑偏移量
     private volatile long minLogicOffset = 0;
     private ConsumeQueueExt consumeQueueExt = null;
 
@@ -92,19 +105,21 @@ public class ConsumeQueue {
             int index = mappedFiles.size() - 3;
             if (index < 0)
                 index = 0;
-
+            // 文件大小
             int mappedFileSizeLogics = this.mappedFileSize;
             MappedFile mappedFile = mappedFiles.get(index);
             ByteBuffer byteBuffer = mappedFile.sliceByteBuffer();
+            // 起始偏移量
             long processOffset = mappedFile.getFileFromOffset();
             long mappedFileOffset = 0;
             long maxExtAddr = 1;
             while (true) {
+                // 死循环整个文件，遍历每一个 ConsumeQueue 单元
                 for (int i = 0; i < mappedFileSizeLogics; i += CQ_STORE_UNIT_SIZE) {
                     long offset = byteBuffer.getLong();
                     int size = byteBuffer.getInt();
                     long tagsCode = byteBuffer.getLong();
-
+                    // 当 offset size 都不为 0 的时候，遍历完毕，对应 Queue 的最大偏移量就计算出来了
                     if (offset >= 0 && size > 0) {
                         mappedFileOffset = i + CQ_STORE_UNIT_SIZE;
                         this.maxPhysicOffset = offset + size;
@@ -117,7 +132,7 @@ public class ConsumeQueue {
                         break;
                     }
                 }
-
+                // 当前文件都写满了，则读取下一个文件
                 if (mappedFileOffset == mappedFileSizeLogics) {
                     index++;
                     if (index >= mappedFiles.size()) {
@@ -153,13 +168,16 @@ public class ConsumeQueue {
     }
 
     public long getOffsetInQueueByTime(final long timestamp) {
+        // 通过时间戳来找到对应的文件，通过文件的最后编辑时间大于当前时间戳的第一个文件
         MappedFile mappedFile = this.mappedFileQueue.getMappedFileByTime(timestamp);
         if (mappedFile != null) {
             long offset = 0;
+            // 从 minLogicOffset 所在的位置开始找
             int low = minLogicOffset > mappedFile.getFileFromOffset() ? (int) (minLogicOffset - mappedFile.getFileFromOffset()) : 0;
             int high = 0;
             int midOffset = -1, targetOffset = -1, leftOffset = -1, rightOffset = -1;
             long leftIndexValue = -1L, rightIndexValue = -1L;
+            // 对应 commitLog 的物理偏移量，第一个 commitLog 文件的起始偏移量
             long minPhysicOffset = this.defaultMessageStore.getMinPhyOffset();
             SelectMappedBufferResult sbr = mappedFile.selectMappedBuffer(0);
             if (null != sbr) {
@@ -169,14 +187,16 @@ public class ConsumeQueue {
                     while (high >= low) {
                         midOffset = (low + high) / (2 * CQ_STORE_UNIT_SIZE) * CQ_STORE_UNIT_SIZE;
                         byteBuffer.position(midOffset);
+                        // 获取物理偏移量
                         long phyOffset = byteBuffer.getLong();
+                        // 获取文件大小
                         int size = byteBuffer.getInt();
                         if (phyOffset < minPhysicOffset) {
                             low = midOffset + CQ_STORE_UNIT_SIZE;
                             leftOffset = midOffset;
                             continue;
                         }
-
+                        // 获取消息的时间戳
                         long storeTime =
                             this.defaultMessageStore.getCommitLog().pickupStoreTimestamp(phyOffset, size);
                         if (storeTime < 0) {
@@ -488,10 +508,16 @@ public class ConsumeQueue {
         }
     }
 
+    /**
+     * 获取索引文件
+     */
     public SelectMappedBufferResult getIndexBuffer(final long startIndex) {
         int mappedFileSize = this.mappedFileSize;
+        // 获取偏移量
         long offset = startIndex * CQ_STORE_UNIT_SIZE;
+        // 必须大于最小的逻辑偏移量，如果小于，消息已经被删除了
         if (offset >= this.getMinLogicOffset()) {
+            // 找文件，返回对应的数据
             MappedFile mappedFile = this.mappedFileQueue.findMappedFileByOffset(offset);
             if (mappedFile != null) {
                 SelectMappedBufferResult result = mappedFile.selectMappedBuffer((int) (offset % mappedFileSize));

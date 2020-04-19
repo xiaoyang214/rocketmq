@@ -38,8 +38,8 @@ public class TransientStorePool {
 
     public TransientStorePool(final MessageStoreConfig storeConfig) {
         this.storeConfig = storeConfig;
-        this.poolSize = storeConfig.getTransientStorePoolSize();
-        this.fileSize = storeConfig.getMappedFileSizeCommitLog();
+        this.poolSize = storeConfig.getTransientStorePoolSize(); // 默认5个，可以通过 broker.conf 来配置
+        this.fileSize = storeConfig.getMappedFileSizeCommitLog(); // commitLog 的文件大小，默认 1G
         this.availableBuffers = new ConcurrentLinkedDeque<>();
     }
 
@@ -52,6 +52,7 @@ public class TransientStorePool {
 
             final long address = ((DirectBuffer) byteBuffer).address();
             Pointer pointer = new Pointer(address);
+            // 将锁住指定的内存区域避免被操作系统调到swap空间中。
             LibC.INSTANCE.mlock(pointer, new NativeLong(fileSize));
 
             availableBuffers.offer(byteBuffer);
@@ -80,6 +81,10 @@ public class TransientStorePool {
         return buffer;
     }
 
+    /**
+     * 返回可用的内存 buffer 的数量，如果没有开启内存 storePool, 则返回 Integer.MAX_VALUE
+     * @return 可用的对外内存数量
+     */
     public int availableBufferNums() {
         if (storeConfig.isTransientStorePoolEnable()) {
             return availableBuffers.size();

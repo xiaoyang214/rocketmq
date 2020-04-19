@@ -43,7 +43,7 @@ public class MessageStoreConfig {
     private int bitMapLengthConsumeQueueExt = 64;
 
     // CommitLog flush interval
-    // flush data to disk
+    // flush data to disk ms
     @ImportantField
     private int flushIntervalCommitLog = 500;
 
@@ -140,6 +140,7 @@ public class MessageStoreConfig {
 
     @ImportantField
     private boolean transientStorePoolEnable = false;
+    // 临时 store pool 的个数，默认是5个
     private int transientStorePoolSize = 5;
     private boolean fastFailIfNoBufferInStorePool = false;
 
